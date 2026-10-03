@@ -30,3 +30,19 @@ original/
 
 # CI build outputs (tools/ci_build.py)
 dist/
+
+# Pi generated files and private game data
+build-pi.ninja
+*.iso
+*.xiso
+*.map
+*.partial
+*.f32
+*.wav
+config.toml
+init.txt
+debug.txt
+gamestate.txt
+game-data/
+save/
+data-root

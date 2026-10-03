@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+APP_ROOT=$(CDPATH= cd -- "$(dirname -- "$(readlink -f "$0")")" && pwd)
+cd "$APP_ROOT"
+export SDL_VIDEO_DRIVER=offscreen
+export EGL_PLATFORM=surfaceless
+export HALO_NO_AUDIO=1
+export HALO_NO_VSYNC=1
+export HALO_DISPLAY_WIDTH=640
+export HALO_PI_BENCHMARK=1
+export HALO_EXIT_AFTER="${HALO_EXIT_AFTER:-60}"
+exec ./run-halo-pi

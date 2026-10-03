@@ -1,140 +1,139 @@
-# Halo: Combat Evolved for Linux, Windows and Android
+# Halo: Combat Evolved on Raspberry Pi
 
-[![Join our Discord](https://invidget.switchblade.xyz/9gqcHyr5km)](https://discord.gg/9gqcHyr5km)
+## Install
 
-This project is a port of the Halo: Combat Evolved decompilation to Linux,
-Windows and Android. The decompilation is of the Xbox build 2342
-(`cachebeta.exe`, SHA-256
-`4cc87b45f721270392a96f1674ed2b5cd4a7bb4355faeab4531d1cf1884d9520`).
+Use **64-bit Raspberry Pi OS Trixie / Debian 13**. Tested on a **Raspberry Pi 4
+Model B with 8 GB RAM**. Allow several GB of free space and use suitable cooling.
 
-<img width="1289" height="995" alt="The game on Linux" src="https://github.com/user-attachments/assets/0d3ad50f-f8b8-46cf-aef8-e3661da2a7d7" />
+```bash
+git clone https://github.com/pkyanam/halo-ce-raspberry-pi.git
+cd halo-ce-raspberry-pi
+./install.sh --iso "/path/to/Halo - Combat Evolved.iso"
+```
 
-The port starts from the decompilation of [bnunu/halo-1](https://github.com/bnunu/halo-1).
-That project is a fork of [punpckhdq/halo](https://github.com/punpckhdq/halo).
+Run as your normal user. The installer asks for administrator access only to
+install missing system packages, builds the native engine, extracts your maps,
+and adds a **Games-menu shortcut** and launch command. The first build takes
+a while; two build jobs are used by default.
 
-## Download
+**Provide your own Xbox Halo CE ISO/xiso or extracted maps.** No ISO, maps,
+music, saves or original game data are included or downloaded. The USA Rev 1
+xiso was tested; images must contain the Xbox XDVDFS filesystem.
 
-GitHub Actions builds the game for each commit. These links download the
-builds of the latest release:
+Already have maps, or want to add a game after installing the engine?
 
-| Platform | Release | Debug |
-| --- | --- | --- |
-| Linux | [halo-linux-release.zip](https://github.com/cybersecurity/halo-ce-universal/releases/latest/download/halo-linux-release.zip) | [halo-linux-debug.zip](https://github.com/cybersecurity/halo-ce-universal/releases/latest/download/halo-linux-debug.zip) |
-| Windows | [halo-windows-release.zip](https://github.com/cybersecurity/halo-ce-universal/releases/latest/download/halo-windows-release.zip) | [halo-windows-debug.zip](https://github.com/cybersecurity/halo-ce-universal/releases/latest/download/halo-windows-debug.zip) |
-| Android | [halo-android-release.zip](https://github.com/cybersecurity/halo-ce-universal/releases/latest/download/halo-android-release.zip) | [halo-android-debug.zip](https://github.com/cybersecurity/halo-ce-universal/releases/latest/download/halo-android-debug.zip) |
+```bash
+./install.sh --maps-dir "/path/to/maps"
 
-Use the release build to play. The debug build stops at the first failed
-assertion and writes it to the log. Use the debug build to find and report
-problems.
+# Alternatively: install now, import your disc later.
+./install.sh
+./install.sh --data-only --iso "/path/to/Halo.iso"
+```
 
-The game updates itself. At start-up it looks for a newer release, and asks
-if you want to install it. Refer to "Updates" in
-[port/linux/README.md](port/linux/README.md#updates).
+## Play
 
-Each build of the `main` branch that passes on all three platforms is a new
-release. The [Releases](https://github.com/cybersecurity/halo-ce-universal/releases)
-page keeps the last five releases. If the latest build has a problem, get
-an older build from that page.
+Launch **Halo: Combat Evolved (Raspberry Pi)** from Games, or run:
 
-## Game data
+```bash
+~/.local/bin/halo-ce-pi --performance
+```
 
-The port does not include the game data. Download an Xbox disc image
-(`.xiso` or `.iso`) of Halo: Combat Evolved. All versions of the game
-operate. The maps of the European (PAL) version were made for a slower
-console. The port changes them to play as the North American (NTSC) maps do,
-so players of the two versions can play together.
+The performance profile renders **320×240, 4:3**, disabling dynamic shadows,
+decorative detail objects and lens flares. Omit `--performance` for normal
+graphics. Both profiles use the same settings and saves.
 
-1. Start the game.
-2. At the first start, the game asks for the disc image. Select it.
-3. The game extracts the `maps/` folder. Then the game starts.
+Desktop and remote-desktop sessions work. From SSH with HDMI connected, the
+launcher discovers your existing Wayland desktop; without a desktop it uses
+KMSDRM. Physical HDMI presentation was not tested during development. Remote
+desktop may select a different graphics driver and have different performance.
 
-On Linux and Windows, the game puts `maps/` next to the executable. On
-Android, copy the disc image to the phone first. The app puts `maps/` in its
-data folder. Refer to [port/android/README.md](port/android/README.md).
+Keyboard/mouse: WASD move, mouse aim, left click fire, Space jump, E/R
+action/reload, F melee, G/right click grenade, Tab change weapon, Q flashlight,
+Escape pause. Gamepads are supported.
 
-## Platforms
+## Performance
 
-Each platform has its own instructions:
+This is a **native ARM64 port**, with the engine's required 32-bit pointers
+inside an ARM64 host. It uses SDL3 and Mesa GLES, without x86 emulation or an
+Android installation. Other Pi models and OS versions are untested.
 
-| Platform | Instructions |
-| --- | --- |
-| Linux (32-bit x86 executable, OpenGL 4.5, SDL3) | [port/linux/README.md](port/linux/README.md) |
-| Windows (32-bit x86 executable, OpenGL 4.5, SDL3) | [port/windows/README.md](port/windows/README.md) |
-| Android (arm64 app, OpenGL ES 3, SDL3) | [port/android/README.md](port/android/README.md) |
+**Sustained 60 fps across the campaign has not been achieved.** Menu and
+cutscene frame rates do not establish campaign performance.
 
-The Linux README also gives the controls, the settings and the multiplayer
-functions. These are almost the same on all platforms.
+| Headless Pi 4 / 8 GB test | Average fps |
+| --- | ---: |
+| Menu with audio | About 100 |
+| Ten campaign openings, 640×480 / original effects | 21–52 |
+| Five-minute scripted campaign combat, performance profile | About 37 |
+| Three-minute local Blood Gulch / one player, performance profile | About 70 |
+
+All ten campaign openings loaded; combat, HUD rendering, audio mixing, local
+Slayer, offscreen and Wayland hardware rendering were tested. See
+[test details](docs/PERFORMANCE.md) and [developer notes](port/pi/README.md).
+Cooling helps avoid clock reductions, but an unthrottled campaign test still
+averaged about 22 fps. Bink movies are skipped upstream; in-engine cutscenes work.
 
 ## Multiplayer
 
-The game can play system link games on a local network and on the internet:
+The upstream **128-player / 128-machine multiplayer limit is retained**.
+This package does not reduce it. A populated 128-player session has **not**
+been tested on the Pi. The one-player benchmark does not predict its performance.
+LAN/system-link functionality remains available. Internet invites are opt-in:
 
-- A system link game can have up to 128 players on up to 128 machines.
-- Linux, Windows and Android machines can play in the same game.
-- An invite link lets a machine join a game on the internet. No server of
-  this project is necessary.
-- The netcode is new. Each machine moves its own player at once,
-  and the host makes the decisions for the game. Refer to
-  [port/linux/NETCODE.md](port/linux/NETCODE.md).
+```bash
+HALO_NET_ONLINE=true ~/.local/bin/halo-ce-pi --performance
+```
 
-## Build the game
+See [upstream multiplayer documentation](port/linux/README.md) and
+[network implementation notes](port/linux/NETCODE.md). Upstream automatic binary
+updates are disabled for this Pi build; update through this repository.
 
-You do not need the Xbox SDK. The port supplies the SDK declarations that
-the game uses. Refer to [port/include/xdk](port/include/xdk/README.md).
+## Files, updates and uninstall
 
-To build the game:
-
-1. Install Python and [ninja](https://ninja-build.org/).
-2. Install the tools for your platform. Refer to the README for the
-   platform.
-3. In the root folder of the repository, enter `python configure.py`.
-4. Enter `ninja` with the target for the platform:
-
-| Target | Result |
+| Item | Default location |
 | --- | --- |
-| `ninja linux` | `build/linux/halo` |
-| `ninja windows` (on Windows) | `build/windows/halo.exe` and `SDL3.dll` |
-| `ninja android_apk` | `port/android/app/build/outputs/apk/debug/app-debug.apk` |
+| Application | `~/.local/share/halo-ce-raspberry-pi/app/` |
+| Maps | `~/.local/share/halo-ce-raspberry-pi/game-data/maps/` |
+| Saves | `~/.local/share/halo-ce-raspberry-pi/game-data/save/` |
+| Settings | `~/.local/share/halo-ce-raspberry-pi/game-data/config.toml` |
+| Command | `~/.local/bin/halo-ce-pi` |
 
-If you enter `ninja` without a target, ninja builds the game for the
-computer that you use.
+`XDG_DATA_HOME` is honored. Reinstalling preserves maps, settings and saves.
+Update from your source checkout:
 
-`tools/ci_build.py` makes the same builds as GitHub Actions. For example,
-enter `python tools/ci_build.py linux release`.
+```bash
+git pull --ff-only
+./install.sh
+```
 
-### Build options
+Remove the application and shortcuts **while keeping game data**:
 
-Give these options to `configure.py`:
+```bash
+python3 ~/.local/share/halo-ce-raspberry-pi/app/uninstall.py
+```
 
-| Option | Result |
-| --- | --- |
-| (none) | A debug build. A failed assertion stops the game. |
-| `--release` | A release build. The game does not examine assertions, as in the retail game. |
-| `--portable` | The Linux and Windows builds operate on all x86-64 processors. Use this option for builds that you give to other persons. |
-| `--lto=thin`, `--lto=off` | Less link-time optimization. The link is faster. |
-| `--pgo=off` | No profile-guided optimization. |
-| `--pgo=train` | Records a new optimization profile. Refer to "Optimization profiles". |
+Use `./install.sh --help` for options. Common examples:
 
-Without `--portable`, the Linux and Windows builds use all the instructions
-of the processor that builds them (`-march=native`). Such a build does not
-always start on a different computer.
+```bash
+./install.sh --dry-run
+./install.sh --data-dir "$HOME/Games/HaloData" --iso "/path/to/Halo.iso"
+./install.sh --skip-deps --jobs 2
+```
 
-### Optimization profiles
+Run without `--skip-deps` for normal setup. `--prefix` chooses an application
+directory separate from game data. To replace maps with a different disc image,
+choose a new `--data-dir`; existing maps are deliberately kept. For a custom
+application prefix, run that prefix's `uninstall.py`.
 
-The builds use profiles of the game to optimize the code:
+## Credits
 
-- `pgo/halo_linux.profdata` for Linux and Android.
-- `pgo/halo_windows.profdata` for Windows.
+Based on [cybersecurity/halo-ce-universal](https://github.com/cybersecurity/halo-ce-universal)
+at `0182da817285b67eee8264663ca79f7c32d66b5e`, which builds on
+[bnunu/halo-1](https://github.com/bnunu/halo-1) and
+[punpckhdq/halo](https://github.com/punpckhdq/halo). The Pi runtime adapts the
+upstream Android ILP32 guest and Linux renderer.
 
-The profiles need clang 22 or later. With an older clang, the builds do not
-use the profiles.
-
-To record a new profile:
-
-1. Delete the profile.
-2. Enter `python configure.py --pgo=train`.
-3. Enter `ninja linux` or `ninja windows`.
-
-The build then plays the main menu and the first minute of each campaign
-level. This procedure continues for approximately 15 minutes. The game
-data must be in `assets/`.
+Upstream source history, [original README](README.upstream.md),
+[CC0 license](LICENSE.md) and third-party notices are retained. Runtime license
+notices are installed too. Halo and its original assets belong to their
+respective owners; this project does not distribute that game data.

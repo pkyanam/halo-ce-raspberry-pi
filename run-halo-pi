@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+APP_ROOT=$(CDPATH= cd -- "$(dirname -- "$(readlink -f "$0")")" && pwd)
+cd "$APP_ROOT"
+if [ -z "${HALO_DATA_ROOT:-}" ]; then
+  if [ -f "$APP_ROOT/data-root" ]; then
+    HALO_DATA_ROOT=$(cat "$APP_ROOT/data-root")
+  else
+    HALO_DATA_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/halo-ce-raspberry-pi/game-data"
+  fi
+fi
+export HALO_DATA_ROOT
+export HALO_UPDATE_AUTO="${HALO_UPDATE_AUTO:-false}"
+export HALO_NET_ONLINE="${HALO_NET_ONLINE:-false}"
+export HALO_NET_ALLOW_UPNP="${HALO_NET_ALLOW_UPNP:-false}"
+export HALO_HIGH_RES_HUD="${HALO_HIGH_RES_HUD:-false}"
+export HALO_HIGH_RES_TEXT="${HALO_HIGH_RES_TEXT:-false}"
+export SDL_AUDIO_DEVICE_SAMPLE_FRAMES="${SDL_AUDIO_DEVICE_SAMPLE_FRAMES:-2048}"
+exec build/pi/halo "$@"

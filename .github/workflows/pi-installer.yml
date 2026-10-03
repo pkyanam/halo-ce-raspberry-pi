@@ -1,0 +1,17 @@
+name: Pi installer checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python and shell syntax
+        run: |
+          python3 -m py_compile configure_pi.py tools/pi_*.py scripts/*.py
+          bash -n install.sh
+          sh -n run-halo-pi play-halo-pi benchmark-halo-pi
+      - name: Check installer data preservation and lifecycle
+        run: python3 -m unittest discover -s tests -v

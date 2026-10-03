@@ -36,6 +36,9 @@ void d3d8_surface_initialize(D3DSurface *surface, D3DFORMAT format, unsigned lon
 void d3d8_surface_resize(D3DSurface *surface, D3DFORMAT format, unsigned long width, unsigned long height);
 
 #ifdef HALO_ANDROID
+#ifdef HALO_PI
+void host_gl_buffer_allocate(unsigned int target, unsigned int size);
+#endif
 /* OpenGL ES 3 (port/android/README.md): the desktop formats, enumerants
 and entry points used below that ES lacks */
 #define GL_BGRA GL_RGBA
@@ -98,6 +101,17 @@ static void screen_mode_choose(long *width, float scale[2])
 		*width = 1600;
 	*width &= ~1L;
 	scale[0] = scale[1] = 1.0f;
+#ifdef HALO_PI
+	/* Pi tuning: keep the Xbox's logical viewport while drawing fewer pixels.
+	Existing target/viewport scaling also handles desktop supersampling. */
+	const char *render_scale = getenv("HALO_PI_RENDER_SCALE");
+	if (render_scale)
+	{
+		float value = (float)atof(render_scale);
+		if (value >= 0.25f && value <= 1.0f)
+			scale[0] = scale[1] = value;
+	}
+#endif
 #else
 	long display_width, display_height;
 
@@ -248,6 +262,7 @@ struct render_target_entry
 	struct render_target_entry *next_in_bucket;
 	struct xgpu_render_target target;
 	unsigned long last_rendered;
+	unsigned long long content_revision;
 };
 
 /* every draw looks up its targets and whether its textures are render
@@ -857,6 +872,7 @@ static GLint target_pixel(float coordinate, int axis)
 nothing to draw into */
 static BOOL bind_targets(BOOL *has_depth)
 {
+	static unsigned long long revision;
 	struct render_target_entry *color = render_target_get(device.render_target);
 	struct render_target_entry *depth = render_target_get(device.depth_stencil);
 
@@ -865,7 +881,10 @@ static BOOL bind_targets(BOOL *has_depth)
 	if (!color && !depth)
 		return FALSE;
 	if (color)
+	{
 		color->last_rendered = device.frame + 1;
+		color->content_revision = ++revision;
+	}
 	/* viewports and clears are in the targets' units (render_target_get) */
 	target_scale[0] = color ? color->target.scale[0] : depth->target.scale[0];
 	target_scale[1] = color ? color->target.scale[1] : depth->target.scale[1];
@@ -931,9 +950,17 @@ static void gl_initialize(void)
 		for (ring = 0; ring < STREAM_BUFFER_RING; ring++)
 		{
 			glBindBuffer(GL_ARRAY_BUFFER, device.stream_buffers[ring]);
+#ifdef HALO_PI
+			host_gl_buffer_allocate(GL_ARRAY_BUFFER, STREAM_BUFFER_SIZE);
+#else
 			glBufferData(GL_ARRAY_BUFFER, STREAM_BUFFER_SIZE, NULL, GL_STREAM_DRAW);
+#endif
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, device.index_buffers[ring]);
+#ifdef HALO_PI
+			host_gl_buffer_allocate(GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE);
+#else
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE, NULL, GL_STREAM_DRAW);
+#endif
 		}
 		device.stream_buffer = device.stream_buffers[0];
 		device.index_buffer = device.index_buffers[0];
@@ -2076,6 +2103,9 @@ struct mip_composite
 	struct mip_composite *next;
 	unsigned long data, width, height, levels;
 	GLuint texture;
+	GLuint source_textures[16];
+	unsigned long long source_revisions[16];
+	unsigned long rendered_levels;
 };
 
 static struct mip_composite *mip_composites;
@@ -2105,6 +2135,13 @@ static GLuint mip_composite_get(const struct xgpu_texture_description *descripti
 {
 	struct mip_composite *composite;
 	unsigned long level, rendered_levels = 0;
+	BOOL changed = FALSE;
+#ifdef HALO_PI
+	const char *cache_setting = getenv("HALO_PI_MIP_CACHE");
+	BOOL cache = !cache_setting || strcmp(cache_setting, "0");
+#else
+	BOOL cache = FALSE;
+#endif
 
 	for (composite = mip_composites; composite; composite = composite->next)
 	{
@@ -2145,6 +2182,23 @@ static GLuint mip_composite_get(const struct xgpu_texture_description *descripti
 		if (!target || target->width != width || target->height != height ||
 			target->gl_width != width || target->gl_height != height)
 			break;
+		/* Each source target gets a new revision before a draw or clear.
+		Repeated sampling of an unchanged shadow mip needs no second copy.
+		Keep the source texture ID too, since target storage can be replaced. */
+		struct render_target_entry *entry = (struct render_target_entry *)
+			((char *)target - offsetof(struct render_target_entry, target));
+		if (cache && level < 16 && composite->source_textures[level] == target->texture &&
+			composite->source_revisions[level] == entry->content_revision)
+		{
+			rendered_levels++;
+			continue;
+		}
+		changed = TRUE;
+		if (level < 16)
+		{
+			composite->source_textures[level] = target->texture;
+			composite->source_revisions[level] = entry->content_revision;
+		}
 #ifdef HALO_ANDROID
 		if (!xgpu_capabilities.copy_image)
 		{
@@ -2156,6 +2210,9 @@ static GLuint mip_composite_get(const struct xgpu_texture_description *descripti
 			composite->texture, GL_TEXTURE_2D, (GLint)level, 0, 0, 0, (GLsizei)width, (GLsizei)height, 1);
 		rendered_levels++;
 	}
+	if (cache && !changed && rendered_levels == composite->rendered_levels)
+		return composite->texture;
+	composite->rendered_levels = rendered_levels;
 	glBindTexture(GL_TEXTURE_2D, composite->texture);
 	/* levels the game did not render come from the ones it did */
 	if (rendered_levels < description->levels)
@@ -3637,6 +3694,7 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 	{
 		struct render_target_entry *back_buffer = render_target_get(&device.back_buffer);
 		int window_width, window_height, width, height, x, y;
+		GLuint source_framebuffer;
 
 		if (trace_frame())
 			platform_log("present back buffer %08lx texture %u", (unsigned long)device.back_buffer.Data,
@@ -3655,12 +3713,15 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		}
 		x = (window_width - width) / 2;
 		y = (window_height - height) / 2;
+		/* Creating an FBO binds both read and draw targets. Do it before
+		binding the window, otherwise the first present blits onto itself. */
+		source_framebuffer = framebuffer_get(back_buffer->target.texture, 0);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 		glDisable(GL_SCISSOR_TEST);
 		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer_get(back_buffer->target.texture, 0));
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, source_framebuffer);
 		/* row 0 of the render target is the top of the picture */
 		glBlitFramebuffer(0, 0, (GLint)back_buffer->target.gl_width, (GLint)back_buffer->target.gl_height,
 			x, y + height, x + width, y, GL_COLOR_BUFFER_BIT, GL_LINEAR);

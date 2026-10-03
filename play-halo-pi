@@ -1,0 +1,66 @@
+#!/bin/sh
+set -eu
+APP_ROOT=$(CDPATH= cd -- "$(dirname -- "$(readlink -f "$0")")" && pwd)
+cd "$APP_ROOT"
+if [ -z "${HALO_DATA_ROOT:-}" ]; then
+  if [ -f "$APP_ROOT/data-root" ]; then
+    HALO_DATA_ROOT=$(cat "$APP_ROOT/data-root")
+  else
+    HALO_DATA_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/halo-ce-raspberry-pi/game-data"
+  fi
+fi
+export HALO_DATA_ROOT
+if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${SDL_VIDEO_DRIVER:-}" ]; then
+  connected=false
+  kms_index=1
+  for connector in /sys/class/drm/card*-HDMI-A-*/status; do
+    if [ -f "$connector" ] && [ "$(cat "$connector")" = connected ]; then
+      connected=true
+      name=${connector%/status}; name=${name##*/}; card=${name%%-HDMI-*}
+      kms_index=${card#card}
+      break
+    fi
+  done
+  if [ "$connected" = false ]; then
+    echo 'Connect an HDMI display to play, or use ./benchmark-halo-pi for headless tests.' >&2
+    exit 2
+  fi
+  # An existing desktop owns DRM; use its Wayland socket from SSH too.
+  runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  for socket in "$runtime"/wayland-*; do
+    if [ -S "$socket" ]; then
+      export XDG_RUNTIME_DIR="$runtime"
+      export WAYLAND_DISPLAY="${socket##*/}"
+      export SDL_VIDEO_DRIVER=wayland
+      break
+    fi
+  done
+  if [ -z "${SDL_VIDEO_DRIVER:-}" ]; then
+    export SDL_VIDEO_DRIVER=kmsdrm
+    export SDL_KMSDRM_DEVICE_INDEX="$kms_index"
+  fi
+fi
+case "${1:-}" in
+  --performance)
+    export HALO_PI_RENDER_SCALE="${HALO_PI_RENDER_SCALE:-0.5}"
+    export HALO_SCREEN_WIDTH="${HALO_SCREEN_WIDTH:-640}"
+    export HALO_SAVE_ROOT="${HALO_SAVE_ROOT:-$HALO_DATA_ROOT/save}"
+    mkdir -p build/pi/play-performance
+    ln -sfn "$HALO_DATA_ROOT/maps" build/pi/play-performance/maps
+    ln -sfn "$HALO_DATA_ROOT/config.toml" build/pi/play-performance/config.toml
+    if [ -f "$HALO_DATA_ROOT/init.txt" ]; then
+      cp "$HALO_DATA_ROOT/init.txt" build/pi/play-performance/init.txt
+    else
+      : > build/pi/play-performance/init.txt
+    fi
+    cat >> build/pi/play-performance/init.txt <<'INIT'
+render_shadows false
+rasterizer_environment_shadows false
+rasterizer_detail_objects false
+rasterizer_lens_flares false
+INIT
+    export HALO_DATA_ROOT="$APP_ROOT/build/pi/play-performance"
+    shift
+    ;;
+esac
+exec ./run-halo-pi "$@"
